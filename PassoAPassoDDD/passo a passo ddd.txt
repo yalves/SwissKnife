@@ -1,0 +1,227 @@
+﻿1- Criar uma solução em branco: GEC6.Blog.Mau.Solution
+
+2- Adicionar as solutions folders e seus respectivos projetos
+
+      1-Presentation (WEB MVC) (set as starterd project)
+
+
+   2-Service (WCF e WEB API)
+	GEC6.Blog.Mau.Presentation.WebBlogMVC  (ASP.Net Web Application - MVC)
+	GEC6.Blog.Mau.Service.WCFService (WCF Service Applictation)
+	GEC6.Blog.Mau.WebAPIService (ASP.Net Web Application - WebAPI)
+
+   3-Application (class library)
+	GEC6.Blog.Mau.Application
+
+4-Domain (class library)
+	GEC6.Blog.Mau.Domain
+      ( Deletar as referencias, menos system)
+5-Infra 
+
+5.1-Data (class library)
+	GEC6.Blog.Mau.Infra.Data 
+
+5.2-CrossCutting
+
+5.2.1-IoC  (class library)
+	GEC6.Blog.Mau.Infra.CrossCutting.IoC
+
+5.2.2-SecurityIdentity  (class library)
+	GEC6.Blog.Mau.Infra.CrossCutting.SecurityIdentity
+
+
+* Em Domain, criar a pasta (New Folder) Entities
+-> nesta pasta adicionar as entidades
+
+Postagem
+	Guid PostagemId
+	string Titulo
+	string Conteúdo
+	string TituloURL
+	Guid AutorId
+	DateTime DataDePublicacao
+	bool Ativo
+	bool ComentariosAtivos
+	int TotalDeVisualizacoes
+	string Tags
+
+Autor
+	Guid AutorId
+	string Nome
+	string Pseudonimo
+	
+Comentário
+	Guid ComentarioId
+	Guid PostagemId
+	Guid UserId
+	bool Ativo
+	DateTime DataDoComent
+	string Conteudo
+
+
+* Em Infra.Data, criar a pasta Contexts
+
+       -> Via Nuget, adicionar o EntityFramework 
+       -> nesta pasta, criar a classe de contexto: Blog4EntitiesDb
+           -> Nesta, herdar de DbContext e adicionar as propriedades DbSet para cada entidades
+
+public DbSet<Postagem> Postagens { get; set; }
+
+    -> Adicionar os métodos abaixo    
+
+protected override void OnModelCreating(DbModelBuilder modelBuilder)
+        {
+            // Conventions
+            modelBuilder.Conventions.Remove<PluralizingTableNameConvention>();
+            modelBuilder.Conventions.Remove<OneToManyCascadeDeleteConvention>();
+            modelBuilder.Conventions.Remove<ManyToManyCascadeDeleteConvention>();
+
+            // General Custom Context Properties
+            modelBuilder.Properties()
+                .Configure(p => p.HasDatabaseGeneratedOption
+                (DatabaseGeneratedOption.None));
+
+            modelBuilder.Properties<string>()
+                .Configure(p => p.HasColumnType("varchar"));
+
+            AddConfigMap(modelBuilder);
+            base.OnModelCreating(modelBuilder);
+
+        }
+
+ private void AddConfigMap(DbModelBuilder modelBuilder)
+        {
+	}
+
+
+* Criar o banco Blog4Entities no SQL Server
+
+* Configurar a connection string no web.config
+
+  <connectionStrings>
+
+    <add name="Blog4EntitiesDb" connectionString="Data Source=.\sqlexpress;Initial Catalog=Blog4Entities;Integrated Security=True" providerName="System.Data.SqlClient" />
+
+  </connectionStrings>
+
+* Habilitar o Migration
+
+1- Não esquecer de setar o projeto WebMVC como projeto padrão de inicialização.
+2- Iniciarlizar o Package Manager Console
+3- Definir o "Default projects" como sendo o projeto onde se encontra a classe de contexto. Isto é: Infra.Data
+
+PM> Enable-Migrations
+
+* Criar um ponto de restauração com Add-Migration
+
+PM> Add-Migration StartDb
+PM> Update-Database -Verbose -
+* CUIDADO, execute o Update-Database com a instrução -, para gerar o SQL que será executado no banco, assim, você pode ter certeza do que será executando antes da execução.
+
+
+* Confirmado o SQL, execute o Update-Database novamente, sem a instrução -, para realizar a operação de fato.
+
+Update-Database -Verbose
+
+* Didaticamente, vamos criar o Controller.
+
+* Não esqueça de adicionar o EF no projeto
+* Adicione as referencias do Domain e Infra em WebMVC
+
+ Buil Solution
+
+* Adicione o Controller com EntityFramework. 
+
+(se der um erro doido, dizendo que a classe de autor, ou algo parecido, já existe no contexto. Então, comente o método OnModelCreating. Build. Tente adicoinar o controller novamente. Funcionou? Descomento o OnModelCreating. Build. Execute a aplicação.)
+
+* Em Domain, adicionar uma pasta Interfaces, com as pastas internas: Repositories e Services.
+
+Criar na pasta Interfaces/Repositories, a interface para Autor: IAutorRepository
+
+    public interface IAutorRepository
+    {
+        IEnumerable<Autor> ObterTodos();
+
+        Autor ObterPorId(Guid? id);
+
+        void Adicionar(Autor autor);
+
+        void Alterar(Autor autor);
+
+        void Remover(Autor autor);
+
+        void Remover(Guid? id);
+    }
+
+* Em Infra.Data, criar a pasta Repositories e dentro desta, criar a classe AutorRepository e implementar a interface IAutorRepository
+
+( pq usamos um repositorio : 
+
+
+
+--------------------------------------------------------------
+
+Container de IoC  (ver o passo-a-passo completo no material do Moodle - ap
+
+* No projeto de IoC, precisamos instalar o SimpleInjector via PM
+
+Install-Package SimpleInjector.Integration.Web
+
+
+Código Auxiliar da classe StartupIoC
+
+public static void RegisterIoC(Container container)
+{
+     // Domain
+     container.Register<IAspectoDaLesaoService, AspectoDaLesaoService>(Lifestyle.Scoped);
+
+     // Infra.Data -> Repositories
+     container.Register<IAspectoDaLesaoRepository, AspectoDaLesaoRepository>(Lifestyle.Scoped);
+}
+
+** Na camada Presentation, via PM
+
+Install-Package SimpleInjector.Integration.Web.Mvc
+Install-Package WebActivatorEx
+
+* Na pasta App_Start, criar a classe SimpleInjectorInitializer
+
+>> Segue código completo da classe (receita de bolo)
+
+using SimpleInjector; 
+using SimpleInjector.Integration.Web; 
+using SimpleInjector.Integration.Web.Mvc; 
+using WebActivatorEx; 
+using GEC6.Blog.Mau.Infra.CrossCutting.IoC; 
+using System.Reflection; 
+using System.Web.Mvc; 
+using GEC6.Blog.Mau.Presentation.WebBlogMVC.App_Start; 
+
+[assembly: PostApplicationStartMethod(typeof(SimpleInjectorInitializer), "Initialize")] 
+namespace GEC6.Blog.Mau.Presentation.WebBlogMVC.App_Start 
+{ 
+    public static class SimpleInjectorInitializer 
+    { 
+        public static void Initialize() 
+        { 
+            var container = new Container(); 
+
+            container.Options.DefaultScopedLifestyle = new WebRequestLifestyle(); 
+
+            // Chamada dos módulos do Simple Injector 
+
+            InitializeContainer(container); 
+
+            container.RegisterMvcControllers(Assembly.GetExecutingAssembly()); 
+
+            container.Verify(); 
+
+            DependencyResolver.SetResolver(new SimpleInjectorDependencyResolver(container)); 
+        } 
+
+        private static void InitializeContainer(Container container) 
+        { 
+            StartupIoC.RegisterServices(container); 
+        } 
+    } 
+} 
